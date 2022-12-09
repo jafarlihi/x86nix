@@ -19,64 +19,62 @@ stack_top:
 .global _start
 .type _start, @function
 _start:
-	mov $stack_top, %esp
-
-    push %ebx
-    push %eax
-
-	call kernel_main
-
-	cli
-1:	hlt
-	jmp 1b
+  mov $stack_top, %esp
+  push %ebx
+  push %eax
+  call check_cpuid
+  call kernel_main
+  cli
+1:hlt
+  jmp 1b
 
 .global gdt_flush
 .type gdt_flush, @function
 gdt_flush:
-    mov 4(%esp), %eax
-    lgdt (%eax)
+  mov 4(%esp), %eax
+  lgdt (%eax)
 
-    mov $0x10, %ax
-    mov %ax, %ds
-    mov %ax, %es
-    mov %ax, %fs
-    mov %ax, %ss
+  mov $0x10, %ax
+  mov %ax, %ds
+  mov %ax, %es
+  mov %ax, %fs
+  mov %ax, %ss
 
-    jmp $0x08, $.flush
+  jmp $0x08, $.flush
 .flush:
-    ret
+  ret
 
 .global tss_flush
 .type tss_flush, @function
 tss_flush:
-    mov $0x2B, %ax
-    ltr %ax
-    ret
+  mov $0x2B, %ax
+  ltr %ax
+  ret
 
 .global idt_flush
 .type idt_flush, @function
 idt_flush:
-    mov 4(%esp), %eax
-    lidt (%eax)
-    ret
+  mov 4(%esp), %eax
+  lidt (%eax)
+  ret
 
 .macro ISR_NOERRCODE count
-    .global isr\count
-    .type isr\count, @function
-    isr\count:
-        cli
-        pushl $0
-        pushl $\count
-        jmp isr_common_stub
+  .global isr\count
+  .type isr\count, @function
+  isr\count:
+    cli
+    pushl $0
+    pushl $\count
+    jmp isr_common_stub
 .endm
 
 .macro ISR_ERRCODE count
-    .global isr\count
-    .type isr\count, @function
-    isr\count:
-        cli
-        pushl $\count
-        jmp isr_common_stub
+  .global isr\count
+  .type isr\count, @function
+  isr\count:
+    cli
+    pushl $\count
+    jmp isr_common_stub
 .endm
 
 ISR_NOERRCODE 0
@@ -117,37 +115,37 @@ ISR_NOERRCODE 128
 
 .type isr_common_stub, @function
 isr_common_stub:
-    pusha
-    push %ds
-    push %es
-    push %fs
-    push %gs
-    movw $0x10, %ax
-    movw %ax, %ds
-    movw %ax, %es
-    movw %ax, %fs
-    movw %ax, %gs
-    movl %esp, %eax
-    pushl %eax
-    movl $isr_handler, %eax
-    call *%eax
-    popl %eax
-    popl %gs
-    popl %fs
-    popl %es
-    popl %ds
-    popa
-    addl $8,%esp
-    iret
+  pusha
+  push %ds
+  push %es
+  push %fs
+  push %gs
+  movw $0x10, %ax
+  movw %ax, %ds
+  movw %ax, %es
+  movw %ax, %fs
+  movw %ax, %gs
+  movl %esp, %eax
+  pushl %eax
+  movl $isr_handler, %eax
+  call *%eax
+  popl %eax
+  popl %gs
+  popl %fs
+  popl %es
+  popl %ds
+  popa
+  addl $8,%esp
+  iret
 
 .macro IRQ val1, val2
-    .global irq\val1
-    .type irq\val1, @function
-    irq\val1:
-        cli
-        pushl $0
-        pushl $\val2
-        jmp irq_common_stub
+  .global irq\val1
+  .type irq\val1, @function
+  irq\val1:
+    cli
+    pushl $0
+    pushl $\val2
+    jmp irq_common_stub
 .endm
 
 IRQ 0, 32
@@ -171,26 +169,50 @@ IRQ 15, 47
 
 .type irq_common_stub, @function
 irq_common_stub:
-    pusha
-    push %ds
-    push %es
-    push %fs
-    push %gs
-    movw $0x10, %ax
-    movw %ax, %ds
-    movw %ax, %es
-    movw %ax, %fs
-    movw %ax, %gs
-    movl %esp, %eax
-    pushl %eax
-    movl $irq_handler, %eax
-    call *%eax
-    popl %eax
-    popl %gs
-    popl %fs
-    popl %es
-    popl %ds
-    popa
-    addl $8, %esp
-    iret
+  pusha
+  push %ds
+  push %es
+  push %fs
+  push %gs
+  movw $0x10, %ax
+  movw %ax, %ds
+  movw %ax, %es
+  movw %ax, %fs
+  movw %ax, %gs
+  movl %esp, %eax
+  pushl %eax
+  movl $irq_handler, %eax
+  call *%eax
+  popl %eax
+  popl %gs
+  popl %fs
+  popl %es
+  popl %ds
+  popa
+  addl $8, %esp
+  iret
 
+error:
+  movl $0x4f524f45, (0xb8000)
+  movl $0x4f3a4f52, (0xb8004)
+  movl $0x4f204f20, (0xb8008)
+  mov %al, (0xb800a)
+  hlt
+
+check_cpuid:
+  pushfl
+  popl %eax
+  movl %eax, %ecx
+  xor $1 << 21, %eax
+  pushl %eax
+  popfl
+  pushfl
+  popl %eax
+  pushl %ecx
+  popfl
+  cmpl %ecx, %eax
+  je check_cpuid.no_cpuid
+  ret
+check_cpuid.no_cpuid:
+  movb $'1', %al
+  jmp error
